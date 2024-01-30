@@ -14,6 +14,9 @@ const OperatorList = {
     "load": 11,
     "sta": 12,
     "add": 13,
+    "jump": 14,
+    "call": 15,
+    "ret": 16,
 }
 
 //Function
@@ -58,24 +61,42 @@ function ExecutionCycle() {
     addr = splitedData[1]
 
     MAR.value = addr
-    if (op == OperatorList['load']) {
-        MBR.value = Memory[MAR.value]
-        AC.value = MBR.value
-    }
-    else if (op == OperatorList['sta']) {
-        MBR.value = AC.value
-        Memory[MAR.value] = MBR.value
-    }
-    else if (op == OperatorList['add']) {
-        MBR.value = Memory[MAR.value]
-        AC.value = AC.value + MBR.value
+    switch (op) {
+        case OperatorList['load']:
+            MBR.value = Memory[MAR.value]
+            AC.value = MBR.value
+            break
+        case OperatorList['sta']:
+            MBR.value = AC.value
+            Memory[MAR.value] = MBR.value
+            break
+        case OperatorList['add']:
+            MBR.value = Memory[MAR.value]
+            AC.value = AC.value + MBR.value
+            break
+        case OperatorList['jump']:
+            PC.value = addr
+            break
+        case OperatorList['call']:
+            MBR.value = PC.value
+            MAR.value = StackPointer
+            PC.value = addr
+            Memory[MAR.value] = MBR.value
+            StackPointer -= 1
+            break
+        case OperatorList['ret']:
+            MAR.value = StackPointer + 1
+            MBR.value = Memory[MAR.value]
+            PC.value = MBR.value
+            StackPointer += 1
+            break
     }
 }
 
 function InstructionCycle() {
     FetchCycle()
     ExecutionCycle()
-    displayState()
+    //displayState()
 }
 
 function fillRect(ctx, x, y, w, h) {
@@ -84,6 +105,29 @@ function fillRect(ctx, x, y, w, h) {
 
 function strokeRect(ctx, x, y, w, h) {
     ctx.strokeRect(x - w / h, y - h / 2 - 7, w, h)
+}
+
+function autoExcute() {
+    if (tick > 0) {
+        tick--
+    }
+    if (tick == 0) {
+        if (step == 0) {
+            //Cycle 1
+            MAR.value = PC.value
+        } else if (step == 1) {
+            //Cycle 2
+            MBR.value = Memory[MAR.value]
+            PC.value += 1
+        } else if (step == 2) {
+            //Cycle 3
+            IR.value = MBR.value
+        } else if (step == 3) {
+            ExecutionCycle()
+        }
+        tick = 50
+        step = (step + 1) % 4
+    }
 }
 
 //Class
@@ -96,9 +140,9 @@ class Register {
     }
     draw() {
         rctx.beginPath()
-        rctx.strokeStyle = "tgray"
-        strokeRect(rctx, this.x, this.y, 150, 50)
-        rctx.font = "20px Arial, sans-serif"
+        rctx.strokeStyle = "gray"
+        strokeRect(rctx, this.x, this.y, 250, 70)
+        rctx.font = "35px Arial, sans-serif"
         rctx.fillStyle = "black"
         rctx.fillText(`${this.name} : ${this.value}`, this.x, this.y)
         rctx.closePath()
@@ -114,19 +158,24 @@ for (var i = 0; i < 1000; i++) {
 Memory[0] = 4
 Memory[1] = 4
 Memory[2] = 4
-Memory[100] = 11001
-Memory[101] = 13002
+Memory[100] = 11000
+Memory[101] = 13001
 Memory[102] = 12000
-Memory[103] = 13000
-Memory[104] = 12005
+Memory[103] = 15110
+Memory[110] = 13001
+Memory[111] = 12004
+Memory[112] = 16000
 
 var PC = new Register(10, 50, "PC", 100)
-var MAR = new Register(10, 125, "MAR", 0)
-var MBR = new Register(10, 200, "MBR", 0)
-var IR = new Register(10, 275, "IR", 0)
+var MAR = new Register(10, 150, "MAR", 0)
+var MBR = new Register(10, 250, "MBR", 0)
+var IR = new Register(10, 350, "IR", 0)
 
-var CU = new Register(200, 50, "CU", 0)
-var AC = new Register(200, 125, "AC", 0)
+var CU = new Register(300, 50, "CU", 0)
+var AC = new Register(300, 150, "AC", 0)
+
+var CurrentPos = PC.value
+var StackPointer = Memory.length - 1
 
 const renderList = [
     PC, MAR, MBR, IR, CU, AC
@@ -138,36 +187,23 @@ function render() {
     rctx.clearRect(0, 0, registerCanvas.width, registerCanvas.height)
     mctx.clearRect(0, 0, memoryCanvas.width, memoryCanvas.height)
     sctx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height)
-    if (tick > 0) {
-        tick--
-    }
-    if(tick==0){
-        if(step==0){
-            //Cycle 1
-            MAR.value = PC.value
-        } else if(step==1){
-            //Cycle 2
-            MBR.value = Memory[MAR.value]
-            PC.value += 1
-        } else if(step==2){
-            //Cycle 3
-            IR.value = MBR.value
-        } else if(step==3){
-            ExecutionCycle()
-        }
-        tick = 100
-        step = (step + 1 ) % 4
-    }
+    //autoExcute()
     for (var i in renderList) {
         renderList[i].draw()
     }
-    mctx.font = "20px Arial, sans-serif"
+    mctx.font = "35px Arial, sans-serif"
     for (var i = 0; i < 10; i++) {
-        mctx.fillText(`[${i}] : ${Memory[i]}`, 10, 25 + i * 30)
+        mctx.fillStyle = "black"
+        mctx.fillText(`[${i}] : ${Memory[i]}`, 10, 50 + i * 50)
+        var j = Memory.length - 1 - i
+        if (j == StackPointer) {
+            mctx.fillStyle = "red"
+        }
+        mctx.fillText(`[${j}] : ${Memory[j]}`, 150, 50 + i * 50)
     }
 
-    sctx.font = "20px Arial, sans-serif"
-    for (var i = 0; i < 7; i++) {
+    sctx.font = "35px Arial, sans-serif"
+    for (var i = 0; i < 15; i++) {
         var n = 100 + i
         sctx.fillStyle = "black"
         if (PC.value == n) {
@@ -181,7 +217,7 @@ function render() {
                 break
             }
         }
-        sctx.fillText(`[${n}] : ${opName} ${splitedData[1]}`, 10, 25 + i * 30)
+        sctx.fillText(`[${n}] : ${opName} [${splitedData[1]}]`, 10, 50 + i * 50)
     }
     requestAnimationFrame(render)
 }
